@@ -11,29 +11,30 @@ import {
   Users,
   Building2,
   Package,
-  ShoppingCart,
   Wallet,
-  PiggyBank,
   BarChart3,
   Settings,
   HelpCircle,
   ChevronDown,
   Landmark,
   Calculator,
-  FileSpreadsheet,
-  Truck,
-  UserCog,
-  Shield,
   Bot,
 } from "lucide-react";
 import { useState } from "react";
+
+interface ChildItem {
+  title: string;
+  href?: string;
+  soon?: boolean;
+}
 
 interface NavItem {
   title: string;
   href?: string;
   icon: React.ElementType;
-  children?: { title: string; href: string }[];
+  children?: ChildItem[];
   badge?: string;
+  soon?: boolean;
 }
 
 const navigation: NavItem[] = [
@@ -49,7 +50,8 @@ const navigation: NavItem[] = [
       { title: "Chart of Accounts", href: "/dashboard/accounting/accounts" },
       { title: "Journals", href: "/dashboard/accounting/journals" },
       { title: "Trial Balance", href: "/dashboard/accounting/trial-balance" },
-      { title: "Financial Statements", href: "/dashboard/accounting/reports" },
+      { title: "Balance Sheet", href: "/dashboard/accounting/reports/balance-sheet" },
+      { title: "Profit & Loss", href: "/dashboard/accounting/reports/profit-loss" },
     ],
   },
   {
@@ -58,18 +60,18 @@ const navigation: NavItem[] = [
     children: [
       { title: "Customers", href: "/dashboard/sales/customers" },
       { title: "Invoices", href: "/dashboard/sales/invoices" },
-      { title: "Quotes", href: "/dashboard/sales/quotes" },
-      { title: "Receipts", href: "/dashboard/sales/receipts" },
+      { title: "Quotes", soon: true },
+      { title: "Receipts", soon: true },
     ],
   },
   {
-    title: "Purchases",
+    title: "Purchasing",
     icon: Receipt,
     children: [
-      { title: "Suppliers", href: "/dashboard/purchases/suppliers" },
-      { title: "Bills", href: "/dashboard/purchases/bills" },
-      { title: "Purchase Orders", href: "/dashboard/purchases/orders" },
-      { title: "Payments", href: "/dashboard/purchases/payments" },
+      { title: "Suppliers", href: "/dashboard/purchasing/suppliers" },
+      { title: "Bills", href: "/dashboard/purchasing/bills" },
+      { title: "Purchase Orders", soon: true },
+      { title: "Payments", soon: true },
     ],
   },
   {
@@ -78,77 +80,90 @@ const navigation: NavItem[] = [
     badge: "PNG",
     children: [
       { title: "Employees", href: "/dashboard/payroll/employees" },
-      { title: "Pay Runs", href: "/dashboard/payroll/runs" },
-      { title: "Timesheets", href: "/dashboard/payroll/timesheets" },
-      { title: "IRC Reports", href: "/dashboard/payroll/irc" },
-      { title: "Super Reports", href: "/dashboard/payroll/super" },
+      { title: "Pay Runs", soon: true },
+      { title: "Timesheets", soon: true },
+      { title: "IRC Reports", soon: true },
+      { title: "Super Reports", soon: true },
     ],
   },
   {
     title: "Inventory",
     icon: Package,
+    soon: true,
     children: [
-      { title: "Products", href: "/dashboard/inventory/products" },
-      { title: "Warehouses", href: "/dashboard/inventory/warehouses" },
-      { title: "Stock Levels", href: "/dashboard/inventory/stock" },
-      { title: "Adjustments", href: "/dashboard/inventory/adjustments" },
+      { title: "Products", soon: true },
+      { title: "Warehouses", soon: true },
+      { title: "Stock Levels", soon: true },
     ],
   },
   {
     title: "Assets",
     icon: Building2,
+    soon: true,
     children: [
-      { title: "Asset Register", href: "/dashboard/assets/register" },
-      { title: "Depreciation", href: "/dashboard/assets/depreciation" },
-      { title: "Maintenance", href: "/dashboard/assets/maintenance" },
+      { title: "Asset Register", soon: true },
+      { title: "Depreciation", soon: true },
     ],
   },
   {
     title: "Banking",
     icon: Landmark,
+    soon: true,
     children: [
-      { title: "Bank Accounts", href: "/dashboard/banking/accounts" },
-      { title: "Transactions", href: "/dashboard/banking/transactions" },
-      { title: "Reconciliation", href: "/dashboard/banking/reconciliation" },
+      { title: "Bank Accounts", soon: true },
+      { title: "Reconciliation", soon: true },
     ],
   },
   {
     title: "CRM",
     icon: Users,
+    soon: true,
     children: [
-      { title: "Contacts", href: "/dashboard/crm/contacts" },
-      { title: "Leads", href: "/dashboard/crm/leads" },
-      { title: "Opportunities", href: "/dashboard/crm/opportunities" },
-    ],
-  },
-  {
-    title: "Reports",
-    icon: BarChart3,
-    children: [
-      { title: "Financial Reports", href: "/dashboard/reports/financial" },
-      { title: "Payroll Reports", href: "/dashboard/reports/payroll" },
-      { title: "Tax Reports", href: "/dashboard/reports/tax" },
-      { title: "Custom Reports", href: "/dashboard/reports/custom" },
+      { title: "Contacts", soon: true },
+      { title: "Leads", soon: true },
     ],
   },
   {
     title: "AI Assistant",
     icon: Bot,
-    href: "/dashboard/ai",
-    badge: "New",
+    soon: true,
+    badge: "Soon",
   },
   {
     title: "Settings",
     icon: Settings,
+    soon: true,
     children: [
-      { title: "Company", href: "/dashboard/settings/company" },
-      { title: "Users", href: "/dashboard/settings/users" },
-      { title: "Roles", href: "/dashboard/settings/roles" },
-      { title: "Integrations", href: "/dashboard/settings/integrations" },
-      { title: "Compliance", href: "/dashboard/settings/compliance" },
+      { title: "Company", soon: true },
+      { title: "Users & Roles", soon: true },
     ],
   },
 ];
+
+function ChildLink({ child, isActive }: { child: ChildItem; isActive: boolean }) {
+  if (child.soon || !child.href) {
+    return (
+      <div className="flex items-center justify-between rounded-lg px-3 py-2 text-sm text-slate-500 cursor-not-allowed">
+        <span>{child.title}</span>
+        <span className="rounded-full bg-slate-700 px-1.5 py-0.5 text-[10px] font-medium text-slate-400">
+          Soon
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <Link
+      href={child.href}
+      className={cn(
+        "block rounded-lg px-3 py-2 text-sm transition-colors",
+        isActive ? "bg-emerald-600 text-white" : "text-slate-400 hover:bg-slate-800 hover:text-white"
+      )}
+    >
+      {child.title}
+    </Link>
+  );
+}
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -156,9 +171,7 @@ export function Sidebar() {
 
   const toggleSection = (title: string) => {
     setOpenSections((prev) =>
-      prev.includes(title)
-        ? prev.filter((t) => t !== title)
-        : [...prev, title]
+      prev.includes(title) ? prev.filter((t) => t !== title) : [...prev, title]
     );
   };
 
@@ -182,7 +195,24 @@ export function Sidebar() {
             const isOpen = openSections.includes(item.title);
             const isActive = item.href
               ? pathname === item.href
-              : item.children?.some((c) => pathname.startsWith(c.href));
+              : item.children?.some((c) => c.href && pathname.startsWith(c.href));
+
+            // Top-level item with no children and marked "soon"
+            if (item.soon && !item.children) {
+              return (
+                <li key={item.title}>
+                  <div className="flex items-center justify-between rounded-lg px-3 py-2 text-sm font-medium text-slate-500 cursor-not-allowed">
+                    <div className="flex items-center gap-3">
+                      <item.icon className="h-5 w-5" />
+                      <span>{item.title}</span>
+                    </div>
+                    <span className="rounded-full bg-slate-700 px-2 py-0.5 text-xs font-semibold text-slate-400">
+                      {item.badge || "Soon"}
+                    </span>
+                  </div>
+                </li>
+              );
+            }
 
             if (item.children) {
               return (
@@ -191,9 +221,8 @@ export function Sidebar() {
                     onClick={() => toggleSection(item.title)}
                     className={cn(
                       "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                      isActive
-                        ? "bg-slate-800 text-white"
-                        : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                      isActive ? "bg-slate-800 text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white",
+                      item.soon && "opacity-60"
                     )}
                   >
                     <div className="flex items-center gap-3">
@@ -205,28 +234,13 @@ export function Sidebar() {
                         </span>
                       )}
                     </div>
-                    <ChevronDown
-                      className={cn(
-                        "h-4 w-4 transition-transform",
-                        isOpen && "rotate-180"
-                      )}
-                    />
+                    <ChevronDown className={cn("h-4 w-4 transition-transform", isOpen && "rotate-180")} />
                   </button>
                   {isOpen && (
                     <ul className="mt-1 space-y-1 pl-11">
                       {item.children.map((child) => (
-                        <li key={child.href}>
-                          <Link
-                            href={child.href}
-                            className={cn(
-                              "block rounded-lg px-3 py-2 text-sm transition-colors",
-                              pathname === child.href
-                                ? "bg-emerald-600 text-white"
-                                : "text-slate-400 hover:bg-slate-800 hover:text-white"
-                            )}
-                          >
-                            {child.title}
-                          </Link>
+                        <li key={child.title}>
+                          <ChildLink child={child} isActive={!!child.href && pathname === child.href} />
                         </li>
                       ))}
                     </ul>
@@ -241,9 +255,7 @@ export function Sidebar() {
                   href={item.href!}
                   className={cn(
                     "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                    pathname === item.href
-                      ? "bg-emerald-600 text-white"
-                      : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                    pathname === item.href ? "bg-emerald-600 text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white"
                   )}
                 >
                   <item.icon className="h-5 w-5" />
@@ -260,13 +272,10 @@ export function Sidebar() {
         </ul>
 
         <div className="mt-8 border-t border-slate-800 pt-4">
-          <Link
-            href="/dashboard/help"
-            className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-slate-400 hover:bg-slate-800 hover:text-white"
-          >
+          <div className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-slate-500 cursor-not-allowed">
             <HelpCircle className="h-5 w-5" />
             <span>Help & Support</span>
-          </Link>
+          </div>
         </div>
       </nav>
     </aside>
