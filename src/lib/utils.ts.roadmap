@@ -1,0 +1,22 @@
+export function generateNumber(prefix: string): string {
+  const now = new Date();
+  const y = now.getFullYear().toString().slice(-2);
+  const m = (now.getMonth() + 1).toString().padStart(2, "0");
+  const seq = Math.floor(Math.random() * 9999)
+    .toString()
+    .padStart(4, "0");
+  return `${prefix}-${y}${m}-${seq}`;
+}
+
+export function formatCurrency(amount: number | string): string {
+  const num = typeof amount === "string" ? parseFloat(amount) : amount;
+  return new Intl.NumberFormat("en-PG", {
+    style: "currency",
+    currency: "PGK",
+    minimumFractionDigits: 2,
+  }).format(num);
+}
+
+export function cn(...classes: (string | boolean | undefined | null)[]): string {
+  return classes.filter(Boolean).join(" ");
+}
