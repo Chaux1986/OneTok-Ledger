@@ -1,21 +1,26 @@
 /**
- * Papua New Guinea IRC Tax Calculator
- * Based on PNG IRC salary/wage tax rates (resident rates).
+ * Papua New Guinea IRC Salary & Wages Tax (SWT) Calculator
+ * Resident individual rates.
  *
- * 2024 Fortnightly Tax Table (Resident):
- * K0       – K769      → 0%
- * K769.01  – K1,538    → 22%
- * K1,538.01– K2,115    → 30%
- * K2,115.01– K3,461    → 35%
- * K3,461.01– K5,384    → 40%
- * K5,384.01+           → 42%
+ * Source: Income Tax (Salary or Wages Tax) (Rates) (2024 Budget) (Amendment) Act,
+ * which made the K20,000 tax-free threshold permanent and removed the 22%
+ * bracket for residents. Confirmed unchanged through the 2026 Budget.
  *
- * Annual brackets (derived from fortnightly × 26):
+ * Annual brackets (Resident):
  * K0       – K20,000   → 0%
- * K20,001  – K33,000   → 22%
- * K33,001  – K70,000   → 30%
- * K70,001  – K250,000  → 35%
+ * K20,001  – K33,000   → 30%
+ * K33,001  – K70,000   → 35%
+ * K70,001  – K250,000  → 40%
  * K250,001+            → 42%
+ *
+ * IMPORTANT: Salary & Wages Tax is fundamentally calculated on a FORTNIGHTLY
+ * basis under PNG law (the official IRC table is an Annexure to the Act, not
+ * a simple division of the annual table). The fortnightly thresholds below
+ * are derived by dividing the annual thresholds by 26, which is accurate for
+ * most cases but may differ by small rounding amounts from the IRC's
+ * official published Annexure 1 table. For payroll runs with material
+ * compliance consequences, cross-check totals against the current IRC
+ * fortnightly table before lodging.
  */
 
 interface TaxBracket {
@@ -25,23 +30,22 @@ interface TaxBracket {
   cumulative: number;
 }
 
-// Annual tax brackets (PNG IRC Resident)
+// Annual tax brackets (PNG IRC Resident) — confirmed current as of 2026
 const ANNUAL_BRACKETS: TaxBracket[] = [
   { min: 0, max: 20000, rate: 0, cumulative: 0 },
-  { min: 20000, max: 33000, rate: 0.22, cumulative: 0 },
-  { min: 33000, max: 70000, rate: 0.3, cumulative: 2860 },
-  { min: 70000, max: 250000, rate: 0.35, cumulative: 13960 },
-  { min: 250000, max: Infinity, rate: 0.42, cumulative: 76960 },
+  { min: 20000, max: 33000, rate: 0.3, cumulative: 0 },
+  { min: 33000, max: 70000, rate: 0.35, cumulative: 3900 },
+  { min: 70000, max: 250000, rate: 0.4, cumulative: 16850 },
+  { min: 250000, max: Infinity, rate: 0.42, cumulative: 88850 },
 ];
 
-// Fortnightly tax brackets (PNG IRC Resident)
+// Fortnightly tax brackets — derived from annual ÷ 26
 const FORTNIGHTLY_BRACKETS: TaxBracket[] = [
-  { min: 0, max: 769, rate: 0, cumulative: 0 },
-  { min: 769, max: 1538, rate: 0.22, cumulative: 0 },
-  { min: 1538, max: 2115, rate: 0.30, cumulative: 169.18 },
-  { min: 2115, max: 3461, rate: 0.35, cumulative: 342.28 },
-  { min: 3461, max: 5384, rate: 0.40, cumulative: 813.38 },
-  { min: 5384, max: Infinity, rate: 0.42, cumulative: 1582.58 },
+  { min: 0, max: 769.23, rate: 0, cumulative: 0 },
+  { min: 769.23, max: 1269.23, rate: 0.3, cumulative: 0 },
+  { min: 1269.23, max: 2692.31, rate: 0.35, cumulative: 150.0 },
+  { min: 2692.31, max: 9615.38, rate: 0.4, cumulative: 648.08 },
+  { min: 9615.38, max: Infinity, rate: 0.42, cumulative: 3417.31 },
 ];
 
 export function calculateIrcTaxAnnual(annualGross: number): number {
@@ -73,10 +77,7 @@ export function calculateIrcTaxFortnightly(fortnightlyGross: number): number {
  * Employee contribution: 6% of gross
  * Employer contribution: 8.4% of gross
  */
-export function calculateNasfund(grossPay: number): {
-  employee: number;
-  employer: number;
-} {
+export function calculateNasfund(grossPay: number): { employee: number; employer: number } {
   return {
     employee: Math.round(grossPay * 0.06 * 100) / 100,
     employer: Math.round(grossPay * 0.084 * 100) / 100,
@@ -87,21 +88,14 @@ export function calculateNasfund(grossPay: number): {
  * Nambawan Super
  * Employee contribution: 6% of gross
  * Employer contribution: 8.4% of gross
- * (Same rates as Nasfund - employee chooses one fund)
  */
-export function calculateNambawanSuper(grossPay: number): {
-  employee: number;
-  employer: number;
-} {
+export function calculateNambawanSuper(grossPay: number): { employee: number; employer: number } {
   return {
     employee: Math.round(grossPay * 0.06 * 100) / 100,
     employer: Math.round(grossPay * 0.084 * 100) / 100,
   };
 }
 
-/**
- * Full payslip calculation
- */
 export interface PayslipCalculation {
   grossPay: number;
   basePay: number;
@@ -122,11 +116,10 @@ export function calculatePayslip(params: {
   overtime?: number;
   allowances?: number;
   deductions?: number;
-  superFund: "nasfund" | "nambawan";
+  superFund: "nasfund" | "nambawan" | null;
 }): PayslipCalculation {
   const { baseSalary, salaryFrequency, overtime = 0, allowances = 0, deductions = 0, superFund } = params;
 
-  // Convert to fortnightly for calculations
   let fortnightlyBase: number;
   switch (salaryFrequency) {
     case "annual":
@@ -152,7 +145,7 @@ export function calculatePayslip(params: {
     const nasfund = calculateNasfund(grossPay);
     nasfundEmployee = nasfund.employee;
     nasfundEmployer = nasfund.employer;
-  } else {
+  } else if (superFund === "nambawan") {
     const nambawan = calculateNambawanSuper(grossPay);
     nambawanEmployee = nambawan.employee;
     nambawanEmployer = nambawan.employer;
@@ -176,13 +169,10 @@ export function calculatePayslip(params: {
   };
 }
 
-/**
- * PNG Leave entitlements per year
- */
 export const PNG_LEAVE_ENTITLEMENTS = {
-  annual: 14, // 14 days per year (after 1 year service)
-  sick: 14,   // 14 days per year
-  maternity: 42, // 6 weeks
+  annual: 14,
+  sick: 14,
+  maternity: 42,
   paternity: 5,
   compassionate: 5,
   unpaid: 0,
