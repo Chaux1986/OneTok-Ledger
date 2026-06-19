@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import {
-  invoices,
-  customers,
+  bills,
   journals,
   journalLines,
   chartOfAccounts,
@@ -20,7 +19,7 @@ const paymentSchema = z.object({
   paymentMethod: z.enum(["bank_transfer", "cash", "cheque", "mobile_money"]),
   reference: z.string().optional(),
   notes: z.string().optional(),
-  bankAccountCode: z.string().default("1100"), // which bank account was credited
+  bankAccountCode: z.string().default("1100"),
 });
 
 export async function POST(
@@ -41,28 +40,27 @@ export async function POST(
     const tenantId = session.tenant.id;
     const paymentAmount = parseFloat(data.amount);
 
-    // Load invoice
-    const [invoice] = await db
+    // Load bill
+    const [bill] = await db
       .select({
-        id: invoices.id,
-        invoiceNumber: invoices.invoiceNumber,
-        total: invoices.total,
-        amountPaid: invoices.amountPaid,
-        amountDue: invoices.amountDue,
-        status: invoices.status,
-        customerId: invoices.customerId,
+        id: bills.id,
+        billNumber: bills.billNumber,
+        total: bills.total,
+        amountPaid: bills.amountPaid,
+        amountDue: bills.amountDue,
+        status: bills.status,
       })
-      .from(invoices)
-      .where(and(eq(invoices.id, id), eq(invoices.tenantId, tenantId)))
+      .from(bills)
+      .where(and(eq(bills.id, id), eq(bills.tenantId, tenantId)))
       .limit(1);
 
-    if (!invoice) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
-    if (invoice.status === "paid" || invoice.status === "void") {
-      return NextResponse.json({ error: `Invoice is already ${invoice.status}` }, { status: 400 });
+    if (!bill) return NextResponse.json({ error: "Bill not found" }, { status: 404 });
+    if (bill.status === "paid" || bill.status === "void") {
+      return NextResponse.json({ error: `Bill is already ${bill.status}` }, { status: 400 });
     }
 
-    const currentPaid = parseFloat(invoice.amountPaid || "0");
-    const currentDue = parseFloat(invoice.amountDue || "0");
+    const currentPaid = parseFloat(bill.amountPaid || "0");
+    const currentDue = parseFloat(bill.amountDue || "0");
 
     if (paymentAmount > currentDue + 0.01) {
       return NextResponse.json(
@@ -75,27 +73,27 @@ export async function POST(
     const newAmountDue = Math.max(0, currentDue - paymentAmount);
     const newStatus = newAmountDue < 0.01 ? "paid" : "partial";
 
-    // Update invoice
+    // Update bill
     await db
-      .update(invoices)
+      .update(bills)
       .set({
         amountPaid: newAmountPaid.toFixed(2),
         amountDue: newAmountDue.toFixed(2),
         status: newStatus,
         updatedAt: new Date(),
       })
-      .where(eq(invoices.id, id));
+      .where(eq(bills.id, id));
 
-    // Post journal: DR Bank, CR Trade Debtors
+    // Post journal: DR Trade Creditors, CR Bank
     const accounts = await db
       .select()
       .from(chartOfAccounts)
       .where(eq(chartOfAccounts.tenantId, tenantId));
 
     const bankAccount = accounts.find((a) => a.code === data.bankAccountCode);
-    const arAccount = accounts.find((a) => a.code === "1210"); // Trade Debtors
+    const apAccount = accounts.find((a) => a.code === "2110"); // Trade Creditors
 
-    if (bankAccount && arAccount) {
+    if (bankAccount && apAccount) {
       const lastJournal = await db
         .select({ journalNumber: journals.journalNumber })
         .from(journals)
@@ -114,8 +112,8 @@ export async function POST(
           tenantId,
           journalNumber,
           date: data.paymentDate,
-          description: `Receipt - ${invoice.invoiceNumber}`,
-          reference: data.reference || invoice.invoiceNumber,
+          description: `Payment - ${bill.billNumber}`,
+          reference: data.reference || bill.billNumber,
           status: "posted",
           totalDebit: paymentAmount.toFixed(2),
           totalCredit: paymentAmount.toFixed(2),
@@ -128,16 +126,16 @@ export async function POST(
       await db.insert(journalLines).values([
         {
           journalId: journal.id,
-          accountId: bankAccount.id,
-          description: `Payment received - ${invoice.invoiceNumber}`,
+          accountId: apAccount.id,
+          description: `Trade creditors cleared - ${bill.billNumber}`,
           debit: paymentAmount.toFixed(2),
           credit: "0",
           sortOrder: 0,
         },
         {
           journalId: journal.id,
-          accountId: arAccount.id,
-          description: `Trade debtors cleared - ${invoice.invoiceNumber}`,
+          accountId: bankAccount.id,
+          description: `Payment to supplier - ${bill.billNumber}`,
           debit: "0",
           credit: paymentAmount.toFixed(2),
           sortOrder: 1,
@@ -149,7 +147,7 @@ export async function POST(
       tenantId,
       userId: session.user.id,
       action: "PAYMENT",
-      entityType: "invoice",
+      entityType: "bill",
       entityId: id,
       newValues: { amount: paymentAmount, paymentDate: data.paymentDate, newStatus },
     });
@@ -157,18 +155,18 @@ export async function POST(
     await db.insert(events).values({
       tenantId,
       aggregateId: id,
-      aggregateType: "invoice",
-      eventType: "invoice_paid",
-      eventData: { invoiceNumber: invoice.invoiceNumber, amount: paymentAmount, newStatus },
+      aggregateType: "bill",
+      eventType: "bill_paid",
+      eventData: { billNumber: bill.billNumber, amount: paymentAmount, newStatus },
       version: 1,
       userId: session.user.id,
     });
 
     return NextResponse.json({
       success: true,
-      invoice: {
+      bill: {
         id,
-        invoiceNumber: invoice.invoiceNumber,
+        billNumber: bill.billNumber,
         amountPaid: newAmountPaid.toFixed(2),
         amountDue: newAmountDue.toFixed(2),
         status: newStatus,
