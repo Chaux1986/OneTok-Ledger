@@ -134,6 +134,7 @@ const navigation: NavItem[] = [
     icon: Settings,
     soon: true,
     children: [
+      { title: "Integrity Check", href: "/dashboard/accounting/integrity-check" },
       { title: "Company", soon: true },
       { title: "Users & Roles", soon: true },
     ],
