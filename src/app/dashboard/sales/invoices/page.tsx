@@ -2,14 +2,15 @@ import { getSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
 import { invoices, customers } from "@/db/schema";
-import { eq, desc, sql } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { Plus, Download, FileText, AlertCircle } from "lucide-react";
+import { Plus, Download, FileText } from "lucide-react";
 import Link from "next/link";
+import { InvoicePayButton } from "@/components/payments/invoice-pay-button";
 
 async function getInvoices(tenantId: string) {
   return db
@@ -121,41 +122,55 @@ export default async function InvoicesPage() {
                   <TableHead className="text-right">Total</TableHead>
                   <TableHead className="text-right">Amount Due</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {invoiceList.map((inv) => (
-                  <TableRow key={inv.id}>
-                    <TableCell className="font-mono font-medium">
-                      <Link href={`/dashboard/sales/invoices/${inv.id}`} className="hover:text-emerald-600 hover:underline">
-                        {inv.invoiceNumber}
-                      </Link>
-                    </TableCell>
-                    <TableCell>
-                      <p className="font-medium">{inv.customerName}</p>
-                      <p className="text-xs text-slate-500">{inv.customerCode}</p>
-                    </TableCell>
-                    <TableCell>{inv.date ? formatDate(inv.date) : "-"}</TableCell>
-                    <TableCell>
-                      <span className={inv.status === "overdue" ? "text-red-600 font-medium" : ""}>
-                        {inv.dueDate ? formatDate(inv.dueDate) : "-"}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-right font-mono">
-                      {formatCurrency(inv.total || "0", currency)}
-                    </TableCell>
-                    <TableCell className="text-right font-mono">
-                      {parseFloat(inv.amountDue || "0") > 0
-                        ? formatCurrency(inv.amountDue || "0", currency)
-                        : "-"}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={STATUS_VARIANT[inv.status || "draft"] || "secondary"}>
-                        {inv.status}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {invoiceList.map((inv) => {
+                  const amountDue = parseFloat(inv.amountDue || "0");
+                  return (
+                    <TableRow key={inv.id}>
+                      <TableCell className="font-mono font-medium">
+                        <Link href={`/dashboard/sales/invoices/${inv.id}`} className="hover:text-emerald-600 hover:underline">
+                          {inv.invoiceNumber}
+                        </Link>
+                      </TableCell>
+                      <TableCell>
+                        <p className="font-medium">{inv.customerName}</p>
+                        <p className="text-xs text-slate-500">{inv.customerCode}</p>
+                      </TableCell>
+                      <TableCell>{inv.date ? formatDate(inv.date) : "-"}</TableCell>
+                      <TableCell>
+                        <span className={inv.status === "overdue" ? "text-red-600 font-medium" : ""}>
+                          {inv.dueDate ? formatDate(inv.dueDate) : "-"}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right font-mono">
+                        {formatCurrency(inv.total || "0", currency)}
+                      </TableCell>
+                      <TableCell className="text-right font-mono">
+                        {amountDue > 0 ? formatCurrency(inv.amountDue || "0", currency) : "-"}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={STATUS_VARIANT[inv.status || "draft"] || "secondary"}>
+                          {inv.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {amountDue > 0 && inv.status !== "draft" ? (
+                          <InvoicePayButton
+                            invoiceId={inv.id}
+                            invoiceNumber={inv.invoiceNumber}
+                            amountDue={amountDue}
+                            currency={currency}
+                          />
+                        ) : (
+                          <span className="text-xs text-slate-300">—</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           )}

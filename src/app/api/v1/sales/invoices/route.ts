@@ -1,184 +1,260 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import {
-  invoices,
-  customers,
-  journals,
-  journalLines,
-  chartOfAccounts,
-  auditLogs,
-  events,
-} from "@/db/schema";
+import { invoices, invoiceLines, customers, journals, journalLines, chartOfAccounts, auditLogs, events } from "@/db/schema";
 import { getSession } from "@/lib/auth";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import { z } from "zod";
 import { generateCode } from "@/lib/utils";
 
-const paymentSchema = z.object({
-  amount: z.string().min(1),
-  paymentDate: z.string(),
-  paymentMethod: z.enum(["bank_transfer", "cash", "cheque", "mobile_money"]),
-  reference: z.string().optional(),
-  notes: z.string().optional(),
-  bankAccountCode: z.string().default("1100"), // which bank account was credited
+const invoiceLineSchema = z.object({
+  description: z.string().min(1),
+  quantity: z.string().optional(),
+  unitPrice: z.string(),
+  discount: z.string().optional(),
+  taxRate: z.string().optional(),
+  accountId: z.string().uuid().optional(),
+  sortOrder: z.number().optional(),
 });
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+const invoiceSchema = z.object({
+  customerId: z.string().uuid(),
+  date: z.string(),
+  dueDate: z.string(),
+  reference: z.string().optional(),
+  notes: z.string().optional(),
+  terms: z.string().optional(),
+  status: z.enum(["draft", "sent"]).optional(),
+  lines: z.array(invoiceLineSchema).min(1),
+});
+
+export async function GET() {
   try {
     const session = await getSession();
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    if (!["owner", "admin", "accountant"].includes(session.user.role)) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
-    const { id } = await params;
-    const body = await request.json();
-    const data = paymentSchema.parse(body);
-    const tenantId = session.tenant.id;
-    const paymentAmount = parseFloat(data.amount);
-
-    // Load invoice
-    const [invoice] = await db
+    const invoiceList = await db
       .select({
         id: invoices.id,
         invoiceNumber: invoices.invoiceNumber,
+        date: invoices.date,
+        dueDate: invoices.dueDate,
+        status: invoices.status,
         total: invoices.total,
         amountPaid: invoices.amountPaid,
         amountDue: invoices.amountDue,
-        status: invoices.status,
-        customerId: invoices.customerId,
+        customerName: customers.name,
+        customerCode: customers.code,
       })
       .from(invoices)
-      .where(and(eq(invoices.id, id), eq(invoices.tenantId, tenantId)))
+      .leftJoin(customers, eq(invoices.customerId, customers.id))
+      .where(eq(invoices.tenantId, session.tenant.id))
+      .orderBy(desc(invoices.createdAt))
+      .limit(100);
+
+    return NextResponse.json({ invoices: invoiceList });
+  } catch (error) {
+    console.error("Error fetching invoices:", error);
+    return NextResponse.json({ error: "Failed to fetch invoices" }, { status: 500 });
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const session = await getSession();
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    if (!["owner", "admin", "accountant", "sales_rep"].includes(session.user.role)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const body = await request.json();
+    const data = invoiceSchema.parse(body);
+    if (data.status === "sent") {
+  const missingAccount = data.lines.some((l) => !l.accountId);
+  if (missingAccount) {
+    return NextResponse.json(
+      { error: "Every line must have a revenue account selected before the invoice can be sent and posted to the ledger." },
+      { status: 400 }
+    );
+  }
+}
+
+    let subtotal = 0;
+    let taxTotal = 0;
+    const lineCalcs = data.lines.map((line) => {
+      const qty = parseFloat(line.quantity || "1");
+      const price = parseFloat(line.unitPrice || "0");
+      const discount = parseFloat(line.discount || "0");
+      const taxRate = parseFloat(line.taxRate || "0");
+      const lineSubtotal = qty * price * (1 - discount / 100);
+      const taxAmount = lineSubtotal * (taxRate / 100);
+      subtotal += lineSubtotal;
+      taxTotal += taxAmount;
+      return { lineSubtotal, taxAmount, lineTotal: lineSubtotal + taxAmount, taxRate };
+    });
+    const total = subtotal + taxTotal;
+
+    const existing = await db
+      .select({ invoiceNumber: invoices.invoiceNumber })
+      .from(invoices)
+      .where(eq(invoices.tenantId, session.tenant.id))
+      .orderBy(desc(invoices.createdAt))
       .limit(1);
 
-    if (!invoice) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
-    if (invoice.status === "paid" || invoice.status === "void") {
-      return NextResponse.json({ error: `Invoice is already ${invoice.status}` }, { status: 400 });
-    }
+    const lastNum = existing.length > 0
+      ? parseInt(existing[0].invoiceNumber.replace("INV", "")) || 0
+      : 0;
+    const invoiceNumber = generateCode("INV", lastNum + 1);
 
-    const currentPaid = parseFloat(invoice.amountPaid || "0");
-    const currentDue = parseFloat(invoice.amountDue || "0");
-
-    if (paymentAmount > currentDue + 0.01) {
-      return NextResponse.json(
-        { error: `Payment K${paymentAmount} exceeds amount due K${currentDue.toFixed(2)}` },
-        { status: 400 }
-      );
-    }
-
-    const newAmountPaid = currentPaid + paymentAmount;
-    const newAmountDue = Math.max(0, currentDue - paymentAmount);
-    const newStatus = newAmountDue < 0.01 ? "paid" : "partial";
-
-    // Update invoice
-    await db
-      .update(invoices)
-      .set({
-        amountPaid: newAmountPaid.toFixed(2),
-        amountDue: newAmountDue.toFixed(2),
-        status: newStatus,
-        updatedAt: new Date(),
+    const [invoice] = await db
+      .insert(invoices)
+      .values({
+        tenantId: session.tenant.id,
+        invoiceNumber,
+        customerId: data.customerId,
+        date: data.date,
+        dueDate: data.dueDate,
+        status: data.status || "draft",
+        reference: data.reference,
+        notes: data.notes,
+        terms: data.terms,
+        subtotal: subtotal.toFixed(2),
+        taxTotal: taxTotal.toFixed(2),
+        total: total.toFixed(2),
+        amountPaid: "0",
+        amountDue: total.toFixed(2),
+        createdBy: session.user.id,
       })
-      .where(eq(invoices.id, id));
+      .returning();
 
-    // Post journal: DR Bank, CR Trade Debtors
-    const accounts = await db
-      .select()
-      .from(chartOfAccounts)
-      .where(eq(chartOfAccounts.tenantId, tenantId));
+    await db.insert(invoiceLines).values(
+      data.lines.map((line, i) => ({
+        invoiceId: invoice.id,
+        description: line.description,
+        quantity: line.quantity || "1",
+        unitPrice: line.unitPrice,
+        discount: line.discount || "0",
+        taxRate: line.taxRate || "0",
+        taxAmount: lineCalcs[i].taxAmount.toFixed(2),
+        lineTotal: lineCalcs[i].lineTotal.toFixed(2),
+        accountId: line.accountId || null,
+        sortOrder: line.sortOrder || i,
+      }))
+    );
 
-    const bankAccount = accounts.find((a) => a.code === data.bankAccountCode);
-    const arAccount = accounts.find((a) => a.code === "1210"); // Trade Debtors
-
-    if (bankAccount && arAccount) {
-      const lastJournal = await db
-        .select({ journalNumber: journals.journalNumber })
-        .from(journals)
-        .where(eq(journals.tenantId, tenantId))
-        .orderBy(desc(journals.createdAt))
+    if (data.status === "sent") {
+      const [arAccount] = await db
+        .select()
+        .from(chartOfAccounts)
+        .where(and(eq(chartOfAccounts.tenantId, session.tenant.id), eq(chartOfAccounts.code, "1210")))
         .limit(1);
 
-      const lastJNum = lastJournal.length > 0
-        ? parseInt(lastJournal[0].journalNumber.replace("JNL", "")) || 0
-        : 0;
-      const journalNumber = generateCode("JNL", lastJNum + 1);
+      const [gstAccount] = await db
+        .select()
+        .from(chartOfAccounts)
+        .where(and(eq(chartOfAccounts.tenantId, session.tenant.id), eq(chartOfAccounts.code, "2210")))
+        .limit(1);
 
-      const [journal] = await db
-        .insert(journals)
-        .values({
-          tenantId,
-          journalNumber,
-          date: data.paymentDate,
-          description: `Receipt - ${invoice.invoiceNumber}`,
-          reference: data.reference || invoice.invoiceNumber,
-          status: "posted",
-          totalDebit: paymentAmount.toFixed(2),
-          totalCredit: paymentAmount.toFixed(2),
-          createdBy: session.user.id,
-          postedBy: session.user.id,
-          postedAt: new Date(),
-        })
-        .returning();
+      if (arAccount && gstAccount) {
+        const lastJournal = await db
+          .select({ journalNumber: journals.journalNumber })
+          .from(journals)
+          .where(eq(journals.tenantId, session.tenant.id))
+          .orderBy(desc(journals.createdAt))
+          .limit(1);
 
-      await db.insert(journalLines).values([
-        {
-          journalId: journal.id,
-          accountId: bankAccount.id,
-          description: `Payment received - ${invoice.invoiceNumber}`,
-          debit: paymentAmount.toFixed(2),
-          credit: "0",
-          sortOrder: 0,
-        },
-        {
+        const lastJNum = lastJournal.length > 0
+          ? parseInt(lastJournal[0].journalNumber.replace("JNL", "")) || 0
+          : 0;
+        const journalNumber = generateCode("JNL", lastJNum + 1);
+
+        const [journal] = await db
+          .insert(journals)
+          .values({
+            tenantId: session.tenant.id,
+            journalNumber,
+            date: data.date,
+            description: `Invoice ${invoiceNumber}`,
+            reference: invoiceNumber,
+            status: "posted",
+            totalDebit: total.toFixed(2),
+            totalCredit: total.toFixed(2),
+            createdBy: session.user.id,
+            postedBy: session.user.id,
+            postedAt: new Date(),
+          })
+          .returning();
+
+        const jLines = [];
+
+        jLines.push({
           journalId: journal.id,
           accountId: arAccount.id,
-          description: `Trade debtors cleared - ${invoice.invoiceNumber}`,
-          debit: "0",
-          credit: paymentAmount.toFixed(2),
-          sortOrder: 1,
-        },
-      ]);
+          description: `Invoice ${invoiceNumber} - ${data.reference || ""}`,
+          debit: total.toFixed(2),
+          credit: "0",
+          sortOrder: 0,
+        });
+
+        let sortIdx = 1;
+        for (const line of data.lines) {
+          if (line.accountId) {
+            const lineSubtotal = parseFloat(line.quantity || "1") * parseFloat(line.unitPrice || "0");
+            jLines.push({
+              journalId: journal.id,
+              accountId: line.accountId,
+              description: line.description,
+              debit: "0",
+              credit: lineSubtotal.toFixed(2),
+              sortOrder: sortIdx++,
+            });
+          }
+        }
+
+        if (taxTotal > 0) {
+          jLines.push({
+            journalId: journal.id,
+            accountId: gstAccount.id,
+            description: `GST on ${invoiceNumber}`,
+            debit: "0",
+            credit: taxTotal.toFixed(2),
+            sortOrder: sortIdx,
+          });
+        }
+
+        await db.insert(journalLines).values(jLines);
+
+        await db.update(invoices)
+          .set({ journalId: journal.id })
+          .where(eq(invoices.id, invoice.id));
+      }
     }
 
     await db.insert(auditLogs).values({
-      tenantId,
+      tenantId: session.tenant.id,
       userId: session.user.id,
-      action: "PAYMENT",
+      action: "CREATE",
       entityType: "invoice",
-      entityId: id,
-      newValues: { amount: paymentAmount, paymentDate: data.paymentDate, newStatus },
+      entityId: invoice.id,
+      newValues: invoice,
     });
 
     await db.insert(events).values({
-      tenantId,
-      aggregateId: id,
+      tenantId: session.tenant.id,
+      aggregateId: invoice.id,
       aggregateType: "invoice",
-      eventType: "invoice_paid",
-      eventData: { invoiceNumber: invoice.invoiceNumber, amount: paymentAmount, newStatus },
+      eventType: "invoice_created",
+      eventData: { invoiceNumber, total, customerId: data.customerId },
       version: 1,
       userId: session.user.id,
     });
 
-    return NextResponse.json({
-      success: true,
-      invoice: {
-        id,
-        invoiceNumber: invoice.invoiceNumber,
-        amountPaid: newAmountPaid.toFixed(2),
-        amountDue: newAmountDue.toFixed(2),
-        status: newStatus,
-      },
-    });
+    return NextResponse.json({ invoice }, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: "Validation error", details: error.issues }, { status: 400 });
     }
-    console.error("Error recording payment:", error);
-    return NextResponse.json({ error: "Failed to record payment" }, { status: 500 });
+    console.error("Error creating invoice:", error);
+    return NextResponse.json({ error: "Failed to create invoice" }, { status: 500 });
   }
 }

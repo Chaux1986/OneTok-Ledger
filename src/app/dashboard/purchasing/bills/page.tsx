@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { Plus, Download, Receipt } from "lucide-react";
 import Link from "next/link";
+import { BillPayButton } from "@/components/payments/bill-pay-button";
 
 async function getBills(tenantId: string) {
   return db
@@ -121,32 +122,48 @@ export default async function BillsPage() {
                   <TableHead className="text-right">Total</TableHead>
                   <TableHead className="text-right">Amount Due</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {billList.map((bill) => (
-                  <TableRow key={bill.id}>
-                    <TableCell className="font-mono font-medium">
-                      <Link href={`/dashboard/purchasing/bills/${bill.id}`} className="hover:text-emerald-600 hover:underline">
-                        {bill.billNumber}
-                      </Link>
-                    </TableCell>
-                    <TableCell>
-                      <p className="font-medium">{bill.supplierName}</p>
-                      <p className="text-xs text-slate-500">{bill.supplierCode}</p>
-                    </TableCell>
-                    <TableCell className="text-sm text-slate-500">{bill.supplierInvoiceNumber || "-"}</TableCell>
-                    <TableCell>{bill.date ? formatDate(bill.date) : "-"}</TableCell>
-                    <TableCell>{bill.dueDate ? formatDate(bill.dueDate) : "-"}</TableCell>
-                    <TableCell className="text-right font-mono">{formatCurrency(bill.total || "0", currency)}</TableCell>
-                    <TableCell className="text-right font-mono">
-                      {parseFloat(bill.amountDue || "0") > 0 ? formatCurrency(bill.amountDue || "0", currency) : "-"}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={STATUS_VARIANT[bill.status || "draft"] || "secondary"}>{bill.status}</Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {billList.map((bill) => {
+                  const amountDue = parseFloat(bill.amountDue || "0");
+                  return (
+                    <TableRow key={bill.id}>
+                      <TableCell className="font-mono font-medium">
+                        <Link href={`/dashboard/purchasing/bills/${bill.id}`} className="hover:text-emerald-600 hover:underline">
+                          {bill.billNumber}
+                        </Link>
+                      </TableCell>
+                      <TableCell>
+                        <p className="font-medium">{bill.supplierName}</p>
+                        <p className="text-xs text-slate-500">{bill.supplierCode}</p>
+                      </TableCell>
+                      <TableCell className="text-sm text-slate-500">{bill.supplierInvoiceNumber || "-"}</TableCell>
+                      <TableCell>{bill.date ? formatDate(bill.date) : "-"}</TableCell>
+                      <TableCell>{bill.dueDate ? formatDate(bill.dueDate) : "-"}</TableCell>
+                      <TableCell className="text-right font-mono">{formatCurrency(bill.total || "0", currency)}</TableCell>
+                      <TableCell className="text-right font-mono">
+                        {amountDue > 0 ? formatCurrency(bill.amountDue || "0", currency) : "-"}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={STATUS_VARIANT[bill.status || "draft"] || "secondary"}>{bill.status}</Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {amountDue > 0 && bill.status !== "draft" ? (
+                          <BillPayButton
+                            billId={bill.id}
+                            billNumber={bill.billNumber}
+                            amountDue={amountDue}
+                            currency={currency}
+                          />
+                        ) : (
+                          <span className="text-xs text-slate-300">—</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           )}

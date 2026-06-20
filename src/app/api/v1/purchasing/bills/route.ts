@@ -68,6 +68,15 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const data = billSchema.parse(body);
+    if (data.status === "approved") {
+  const missingAccount = data.lines.some((l) => !l.accountId);
+  if (missingAccount) {
+    return NextResponse.json(
+      { error: "Every line must have an expense account selected before the bill can be approved and posted to the ledger." },
+      { status: 400 }
+    );
+  }
+}
 
     // Calculate totals
     let subtotal = 0;
