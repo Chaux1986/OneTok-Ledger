@@ -806,3 +806,69 @@ export const billsRelations = relations(bills, ({ one, many }) => ({
   }),
   lines: many(billLines),
 }));
+
+// ============================================================================
+// BANKING SCHEMA - Bank Accounts & Reconciliation
+// ============================================================================
+
+export const bankTransactionStatusEnum = pgEnum("bank_transaction_status", [
+  "unreconciled",
+  "matched",
+  "reconciled",
+]);
+
+export const bankAccounts = pgTable(
+  "bank_accounts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+    chartAccountId: uuid("chart_account_id").references(() => chartOfAccounts.id).notNull(),
+    bankName: varchar("bank_name", { length: 100 }).notNull(),
+    accountNumber: varchar("account_number", { length: 50 }),
+    accountType: varchar("account_type", { length: 20 }).default("checking"),
+    lastReconciledDate: date("last_reconciled_date"),
+    lastReconciledBalance: decimal("last_reconciled_balance", { precision: 18, scale: 2 }).default("0"),
+    isActive: boolean("is_active").default(true),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    unique("bank_accounts_chart_account_unique").on(table.chartAccountId),
+    index("bank_accounts_tenant_idx").on(table.tenantId),
+  ]
+);
+
+export const bankTransactions = pgTable(
+  "bank_transactions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+    bankAccountId: uuid("bank_account_id").references(() => bankAccounts.id).notNull(),
+    transactionDate: date("transaction_date").notNull(),
+    description: text("description").notNull(),
+    reference: varchar("reference", { length: 100 }),
+    debit: decimal("debit", { precision: 18, scale: 2 }).default("0"),
+    credit: decimal("credit", { precision: 18, scale: 2 }).default("0"),
+    status: bankTransactionStatusEnum("status").default("unreconciled").notNull(),
+    matchedJournalLineId: uuid("matched_journal_line_id").references(() => journalLines.id),
+    createdBy: uuid("created_by").references(() => users.id).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("bank_transactions_tenant_idx").on(table.tenantId),
+    index("bank_transactions_account_idx").on(table.bankAccountId),
+    index("bank_transactions_status_idx").on(table.status),
+  ]
+);
+
+export const bankAccountsRelations = relations(bankAccounts, ({ one, many }) => ({
+  tenant: one(tenants, { fields: [bankAccounts.tenantId], references: [tenants.id] }),
+  chartAccount: one(chartOfAccounts, { fields: [bankAccounts.chartAccountId], references: [chartOfAccounts.id] }),
+  transactions: many(bankTransactions),
+}));
+
+export const bankTransactionsRelations = relations(bankTransactions, ({ one }) => ({
+  tenant: one(tenants, { fields: [bankTransactions.tenantId], references: [tenants.id] }),
+  bankAccount: one(bankAccounts, { fields: [bankTransactions.bankAccountId], references: [bankAccounts.id] }),
+  matchedJournalLine: one(journalLines, { fields: [bankTransactions.matchedJournalLineId], references: [journalLines.id] }),
+}));

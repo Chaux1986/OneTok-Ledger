@@ -106,14 +106,12 @@ const navigation: NavItem[] = [
     ],
   },
   {
-    title: "Banking",
-    icon: Landmark,
-    soon: true,
-    children: [
-      { title: "Bank Accounts", soon: true },
-      { title: "Reconciliation", soon: true },
-    ],
-  },
+  title: "Banking",
+  icon: Landmark,
+  children: [
+    { title: "Bank Accounts", href: "/dashboard/banking/accounts" },
+  ],
+},
   {
     title: "CRM",
     icon: Users,
