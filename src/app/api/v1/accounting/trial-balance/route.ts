@@ -78,9 +78,12 @@ export async function GET() {
           totalDebit: debit,
           totalCredit: credit,
           balance,
-          // For trial balance display: show balance in debit or credit column
-          trialDebit: isDebitNormal && balance > 0 ? balance : 0,
-          trialCredit: !isDebitNormal && balance > 0 ? Math.abs(balance) : 0,
+          // For trial balance display: a balance always lands on exactly one
+          // side, even when an account goes negative relative to its normal
+          // side (e.g. an over-credited asset account). It must never
+          // silently vanish from the report just because the sign flipped.
+          trialDebit: isDebitNormal ? Math.max(balance, 0) : Math.max(-balance, 0),
+          trialCredit: isDebitNormal ? Math.max(-balance, 0) : Math.max(balance, 0),
         };
       })
       .filter((a) => a.totalDebit > 0 || a.totalCredit > 0 || a.balance !== 0);

@@ -91,9 +91,9 @@ const navigation: NavItem[] = [
     icon: Package,
     soon: true,
     children: [
-      { title: "Products", soon: true },
-      { title: "Warehouses", soon: true },
-      { title: "Stock Levels", soon: true },
+      { title: "Products", href: "/dashboard/inventory/products" },
+      { title: "Warehouses", href: "/dashboard/inventory/warehouses" },
+      { title: "Stock Levels", href: "/dashboard/inventory/stock-levels" },
     ],
   },
   {
