@@ -52,6 +52,7 @@ const navigation: NavItem[] = [
       { title: "Trial Balance", href: "/dashboard/accounting/trial-balance" },
       { title: "Balance Sheet", href: "/dashboard/accounting/reports/balance-sheet" },
       { title: "Profit & Loss", href: "/dashboard/accounting/reports/profit-loss" },
+      { title: "Integrity Check", href: "/dashboard/accounting/integrity-check" },
     ],
   },
   {
@@ -80,7 +81,7 @@ const navigation: NavItem[] = [
     badge: "PNG",
     children: [
       { title: "Employees", href: "/dashboard/payroll/employees" },
-      { title: "Pay Runs", soon: true },
+      { title: "Pay Runs", href: "/dashboard/payroll/runs" },
       { title: "Timesheets", soon: true },
       { title: "IRC Reports", soon: true },
       { title: "Super Reports", soon: true },
@@ -89,7 +90,6 @@ const navigation: NavItem[] = [
   {
     title: "Inventory",
     icon: Package,
-    soon: true,
     children: [
       { title: "Products", href: "/dashboard/inventory/products" },
       { title: "Warehouses", href: "/dashboard/inventory/warehouses" },
@@ -99,19 +99,18 @@ const navigation: NavItem[] = [
   {
     title: "Assets",
     icon: Building2,
-    soon: true,
     children: [
-      { title: "Asset Register", soon: true },
-      { title: "Depreciation", soon: true },
+      { title: "Asset Register", href: "/dashboard/assets/register" },
+      { title: "Depreciation", href: "/dashboard/assets/depreciation" },
     ],
   },
   {
-  title: "Banking",
-  icon: Landmark,
-  children: [
-    { title: "Bank Accounts", href: "/dashboard/banking/accounts" },
-  ],
-},
+    title: "Banking",
+    icon: Landmark,
+    children: [
+      { title: "Bank Accounts", href: "/dashboard/banking/accounts" },
+    ],
+  },
   {
     title: "CRM",
     icon: Users,
@@ -132,7 +131,6 @@ const navigation: NavItem[] = [
     icon: Settings,
     soon: true,
     children: [
-      { title: "Integrity Check", href: "/dashboard/accounting/integrity-check" },
       { title: "Company", soon: true },
       { title: "Users & Roles", soon: true },
     ],
