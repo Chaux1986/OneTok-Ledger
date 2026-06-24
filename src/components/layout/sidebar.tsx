@@ -83,8 +83,8 @@ const navigation: NavItem[] = [
       { title: "Employees", href: "/dashboard/payroll/employees" },
       { title: "Pay Runs", href: "/dashboard/payroll/runs" },
       { title: "Timesheets", soon: true },
-      { title: "IRC Reports", soon: true },
-      { title: "Super Reports", soon: true },
+      { title: "IRC Reports", href: "/dashboard/payroll/reports/irc" },
+      { title: "Super Reports", href: "/dashboard/payroll/reports/super" },
     ],
   },
   {
