@@ -131,7 +131,7 @@ const navigation: NavItem[] = [
     icon: Settings,
     soon: true,
     children: [
-      { title: "Company", soon: true },
+      { title: "Company", href: "/dashboard/settings/company" },
       { title: "Users & Roles", soon: true },
     ],
   },
