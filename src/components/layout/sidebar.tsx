@@ -61,7 +61,7 @@ const navigation: NavItem[] = [
     children: [
       { title: "Customers", href: "/dashboard/sales/customers" },
       { title: "Invoices", href: "/dashboard/sales/invoices" },
-      { title: "Quotes", soon: true },
+      { title: "Quotes", href: "/dashboard/sales/quotes" },
       { title: "Receipts", soon: true },
     ],
   },

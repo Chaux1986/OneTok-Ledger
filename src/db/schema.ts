@@ -872,3 +872,79 @@ export const bankTransactionsRelations = relations(bankTransactions, ({ one }) =
   bankAccount: one(bankAccounts, { fields: [bankTransactions.bankAccountId], references: [bankAccounts.id] }),
   matchedJournalLine: one(journalLines, { fields: [bankTransactions.matchedJournalLineId], references: [journalLines.id] }),
 }));
+
+// ============================================================================
+// SALES QUOTES SCHEMA
+// ============================================================================
+
+export const quoteStatusEnum = pgEnum("quote_status", [
+  "draft",
+  "sent",
+  "accepted",
+  "declined",
+  "expired",
+  "converted",
+]);
+
+export const quotes = pgTable(
+  "quotes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+    quoteNumber: varchar("quote_number", { length: 50 }).notNull(),
+    customerId: uuid("customer_id").references(() => customers.id).notNull(),
+    date: date("date").notNull(),
+    expiryDate: date("expiry_date").notNull(),
+    status: quoteStatusEnum("status").default("draft").notNull(),
+    reference: varchar("reference", { length: 100 }),
+    subtotal: decimal("subtotal", { precision: 18, scale: 2 }).default("0"),
+    taxTotal: decimal("tax_total", { precision: 18, scale: 2 }).default("0"),
+    total: decimal("total", { precision: 18, scale: 2 }).default("0"),
+    notes: text("notes"),
+    terms: text("terms"),
+    convertedInvoiceId: uuid("converted_invoice_id").references(() => invoices.id),
+    convertedAt: timestamp("converted_at"),
+    createdBy: uuid("created_by").references(() => users.id).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    unique("quotes_tenant_number_unique").on(table.tenantId, table.quoteNumber),
+    index("quotes_tenant_idx").on(table.tenantId),
+    index("quotes_customer_idx").on(table.customerId),
+    index("quotes_status_idx").on(table.status),
+  ]
+);
+
+export const quoteLines = pgTable(
+  "quote_lines",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    quoteId: uuid("quote_id").references(() => quotes.id).notNull(),
+    description: text("description").notNull(),
+    quantity: decimal("quantity", { precision: 18, scale: 4 }).default("1"),
+    unitPrice: decimal("unit_price", { precision: 18, scale: 2 }).default("0"),
+    discount: decimal("discount", { precision: 5, scale: 2 }).default("0"),
+    taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).default("0"),
+    taxAmount: decimal("tax_amount", { precision: 18, scale: 2 }).default("0"),
+    lineTotal: decimal("line_total", { precision: 18, scale: 2 }).default("0"),
+    accountId: uuid("account_id").references(() => chartOfAccounts.id),
+    sortOrder: integer("sort_order").default(0),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("quote_lines_quote_idx").on(table.quoteId),
+  ]
+);
+
+export const quotesRelations = relations(quotes, ({ one, many }) => ({
+  tenant: one(tenants, { fields: [quotes.tenantId], references: [tenants.id] }),
+  customer: one(customers, { fields: [quotes.customerId], references: [customers.id] }),
+  lines: many(quoteLines),
+  convertedInvoice: one(invoices, { fields: [quotes.convertedInvoiceId], references: [invoices.id] }),
+}));
+
+export const quoteLinesRelations = relations(quoteLines, ({ one }) => ({
+  quote: one(quotes, { fields: [quoteLines.quoteId], references: [quotes.id] }),
+  account: one(chartOfAccounts, { fields: [quoteLines.accountId], references: [chartOfAccounts.id] }),
+}));
